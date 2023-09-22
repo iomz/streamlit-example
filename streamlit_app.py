@@ -1,38 +1,75 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
+# Importing all relevant modules
 import streamlit as st
+from streamlit.components.v1 import html as st_html
 
-"""
-# Welcome to Streamlit!
-
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+from utils import read_notebook_st, create_notebook, create_messagelist, retrieve_html, save_notebook_st
+from comment_generator import query_message_list
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+# Setting website configurations
+st.set_page_config(layout="wide", page_title="Automatic Documentation for Jupyter Notebooks")
 
-    Point = namedtuple('Point', 'x y')
-    data = []
+# Writing title on website
+st.write("## Automatically generate documentation for your Jupyter Notebook")
 
-    points_per_turn = total_points / num_turns
+# Writing description text on website
+st.write(
+    ":computer: Try uploading a Jupyter Notebook to watch how documentation is added magically. The adjusted notebook can be downloaded from the sidebar"
+)
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
+# Setting download sidebar
+st.sidebar.write("## Upload and download :gear:")
+my_upload = st.sidebar.file_uploader("Upload a notebook", type=["ipynb"])
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+# Setting to columns (left: old notebook; right: new notebook)
+col1, col2 = st.columns(2)
+
+
+def generate_new_notebook(upload):
+    """
+    This function turns an uploaded notebook into a dictionary, creates an HTML window, queries GPT-3.5, creates a new notebook,
+    and saves it for downloading. The original and updated notebooks are displayed with a download button.
+
+    """
+    # Turning upload into dictionary
+    original_notebook = read_notebook_st(upload)
+
+    # Create HTML
+    original_HTML = retrieve_html(original_notebook)
+
+    # Display uploaded notebook (in HMTL)
+    with col1:
+        st.header("Original notebook :notebook:")
+        st_html(original_HTML, height=800, scrolling=True)
+
+    # Reading dictionary and creating message list
+    original_messages = create_messagelist(original_notebook)
+
+    # Query call to GPT-3.5
+    documented_messages = query_message_list(original_messages)
+
+    # Create new notebook & fill
+    documented_notebook = create_notebook(documented_messages)
+
+    # Retreive new HMTL
+    documented_HTML = retrieve_html(documented_notebook)
+
+    # Display new notebook (in HMTL)
+    with col2:
+        st.header("Updated notebook :notebook:")
+        st_html(documented_HTML, height=800, scrolling=True)
+
+    # Save new notebook for downloading
+    downloaded_notebook = save_notebook_st(documented_notebook)
+
+    # Creating download button with the updated notebook
+    st.sidebar.download_button(
+        "Download documented notebook", downloaded_notebook, "documented_notebook.ipynb", "application/x-ipynb+json"
+    )
+
+
+# Running application on Streamlit
+if my_upload:
+    generate_new_notebook(my_upload)
+else:
+    st.write("Please upload a Jupyter Notebook to view.")
